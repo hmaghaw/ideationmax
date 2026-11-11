@@ -5,9 +5,9 @@ services:
     container_name: ideationmax-web
     restart: unless-stopped
     # Bound to localhost only: the host's nginx terminates HTTPS and proxies here.
-    # Change PORT if 8081 is already taken on the server.
+    # PORT comes from the .env file next to this one.
     ports:
-      - "127.0.0.1:${PORT:-8081}:8080"
+      - "127.0.0.1:${PORT:?Set PORT in .env}:8080"
     read_only: true
     tmpfs:
       - /tmp

@@ -6,7 +6,6 @@ set -euo pipefail
 
 DOMAIN="ideationmax.com"
 DOMAINS=(-d ideationmax.com -d www.ideationmax.com)
-PORT="${PORT:-8081}"
 CONF_SRC="$(cd "$(dirname "$0")" && pwd)/ideationmax.com.conf"
 
 say()  { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
@@ -15,22 +14,27 @@ fail() { printf '\n\033[31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 [[ $EUID -eq 0 ]] || fail "Run with sudo."
 cd "$(dirname "$0")/.."
 
+# The port lives in .env, the same file docker compose reads
+[[ -f .env ]] || cp .env.example .env
+PORT="$(grep -E '^PORT=' .env | tail -1 | cut -d= -f2 | tr -d '[:space:]"'"'")"
+[[ "$PORT" =~ ^[0-9]+$ ]] || fail "PORT in .env must be a number (found: '${PORT}')."
+
 for bin in docker nginx certbot; do
   command -v "$bin" >/dev/null || fail "'$bin' is not installed on this server."
 done
 docker compose version >/dev/null 2>&1 || fail "Docker Compose v2 ('docker compose') is required."
 
-# 1. Port check: 8081 must be free, or already ours
-say "Checking port $PORT"
+# 1. Port check: PORT must be free, or already ours
+say "Checking port $PORT (from .env)"
 if ss -tln | grep -qE "127\.0\.0\.1:$PORT |0\.0\.0\.0:$PORT |\[::\]:$PORT |\*:$PORT "; then
   if ! docker ps --format '{{.Names}} {{.Ports}}' | grep -q "^ideationmax-web .*:$PORT->"; then
-    fail "Port $PORT is used by something else. Re-run with another port, e.g.: sudo PORT=8082 ./deploy/setup-host.sh"
+    fail "Port $PORT is used by something else. Set another port in .env (e.g. PORT=8082) and re-run."
   fi
 fi
 
-# 2. Build and start the site container
+# 2. Build and start the site container (compose reads PORT from .env)
 say "Building and starting the ideationmax-web container"
-PORT="$PORT" docker compose up -d --build
+docker compose up -d --build
 for i in {1..15}; do
   curl -fsS "http://127.0.0.1:$PORT/healthz" >/dev/null 2>&1 && break
   sleep 1
